@@ -1,11 +1,9 @@
-
 import httpx
 from selectolax.parser import HTMLParser
 from urllib.parse import urljoin
 from dataclasses import asdict, dataclass
 import asyncio
-import time
-
+import sqlite3
 
 @dataclass
 class Product:
@@ -35,6 +33,31 @@ def extract_text(html: HTMLParser, sel: str) -> str | None:
         return clean_data(text)
     except AttributeError:
         return None
+
+def export_to_sql(products):
+    conn = sqlite3.connect('products.db')
+    cursor = conn.cursor()
+    
+    # Create table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS products (
+        company TEXT,
+        name TEXT,
+        model_number TEXT,
+        price TEXT
+    )
+    ''')
+
+    # Insert products into the table
+    for product in products:
+        cursor.execute('''
+        INSERT INTO products (company, name, model_number, price) 
+        VALUES (?, ?, ?, ?)
+        ''', (product.company, product.name, product.model_number, product.price))
+
+    conn.commit()
+    conn.close()
+
 
 def clean_data(value):
     chars_remove = ["MODEL #:", "\xa0"]
@@ -96,20 +119,11 @@ async def main():
                 "https://www.hardwareworld.com/cw3audz/Stationary-Tools"]
    
         
-    for baseurl in baseurls:  
+    for baseurl in baseurls:
         async with httpx.AsyncClient() as client:
             html = await get_html(baseurl, client)
             if html is None:
-                return
-        
-        # hardware = []
-        # hardware_urls = list(parse_hardware_page(html))
-        # for url in hardware_urls:
-        #     html = await get_html(url, client)
-        #     if html is None:
-        #         continue
-        #     hardware.append(parse_objects_page(html))
-        #     print(url)
+                continue
         
             product_urls = list(parse_objects_page(html))
 
@@ -119,33 +133,12 @@ async def main():
                 if html is None:
                     continue
                 products.append(parse_product_page(html))
-                time.sleep(0.5)
+                await asyncio.sleep(0.25)  # Non-blocking sleep
                 
-            
-
             for item in products:
                 print(asdict(item))
+                
+            export_to_sql(products)  # Save all products for this base URL
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-    
-
-
-  
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
